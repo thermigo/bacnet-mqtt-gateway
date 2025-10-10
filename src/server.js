@@ -51,12 +51,14 @@ class Server {
                 const config = {
                     'device': device,
                     'polling': {
-                        'schedule': "*/15 * * * * *"
+                        'schedule': "*/15 * * * * *",
+                        'delayMs': 0
                     },
                     'objects': deviceObjects
                 }
                 this.bacnetClient.saveConfig(config);
-                this.bacnetClient.startPolling(config.device, config.objects, config.polling.schedule);
+                const delayMs = config.polling && config.polling.delayMs !== undefined ? config.polling.delayMs : 0;
+                this.bacnetClient.startPolling(config.device, config.objects, config.polling.schedule, delayMs);
             }
             res.send(deviceObjects);
         });
@@ -65,7 +67,8 @@ class Server {
     _configurePolling(req, res) {
         const config = req.body;
         this.bacnetClient.saveConfig(config);
-        this.bacnetClient.startPolling(config.device, config.objects, config.polling.schedule);
+        const delayMs = config.polling && config.polling.delayMs !== undefined ? config.polling.delayMs : 0;
+        this.bacnetClient.startPolling(config.device, config.objects, config.polling.schedule, delayMs);
         res.send({});
     }
 

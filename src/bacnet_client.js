@@ -22,7 +22,8 @@ class BacnetClient extends EventEmitter {
             } else {
                 logger.log('warn', '[BacnetClient] Loaded a device config without a valid deviceId.');
             }
-            this.startPolling(deviceConfig.device, deviceConfig.objects, deviceConfig.polling.schedule);
+            const delayMs = deviceConfig.polling && deviceConfig.polling.delayMs !== undefined ? deviceConfig.polling.delayMs : 0;
+            this.startPolling(deviceConfig.device, deviceConfig.objects, deviceConfig.polling.schedule, delayMs);
         })
         this.bacnetConfig.load();
     }
@@ -130,51 +131,57 @@ class BacnetClient extends EventEmitter {
         });
     }
 
-    startPolling(device, objects, scheduleExpression) {
-            scheduleJob(scheduleExpression, () => {
-            const promises = [];
-            objects.forEach(deviceObject => {
+    startPolling(device, objects, scheduleExpression, pollingDelayMs = 0) {
+            scheduleJob(scheduleExpression, async () => {
+            const results = [];
+
+            // Read objects sequentially with optional delay
+            for (const deviceObject of objects) {
                 const objectIdToRead = { type: deviceObject.objectId.type, instance: deviceObject.objectId.instance };
-                promises.push(
-                    this._readObjectPresentValue(device.address, deviceObject.objectId.type, deviceObject.objectId.instance)
-                        .then(res => {
-                            if (res.error) {
-                                logger.log('warn', `[Polling] Error reading ${JSON.stringify(objectIdToRead)}: ${JSON.stringify(res.error)}`);
-                            }
-                            return res;
-                        })
-                );
-            });
-            Promise.all(promises).then((result) => {
-                const values = {};
-                const successfulResults = result.filter(element => {
-                    if (element.error) {
-                        return false;
-                    }
-                    if (!element.value || !element.value.values || element.value.values.length === 0) {
-                        logger.log('warn', `[Polling] Filtering out result with no values: ${JSON.stringify(element.value)}`);
-                        return false;
-                    }
-                    return true;
-                }).map(element => element.value);
 
-                successfulResults.forEach(object => {
-                    if (!object || !object.values || object.values.length === 0 || !object.values[0].values) {
-                        logger.log('warn', `[Polling] Skipping malformed successful result: ${JSON.stringify(object)}`);
-                        return;
-                    }
-                    const objectId = object.values[0].objectId.type + '_' + object.values[0].objectId.instance;
-                    const presentValue = this._findValueById(object.values[0].values, bacnet.enum.PropertyIds.PROP_PRESENT_VALUE);
-                    const objectName = this._findValueById(object.values[0].values, bacnet.enum.PropertyIds.PROP_OBJECT_NAME);
+                const res = await this._readObjectPresentValue(device.address, deviceObject.objectId.type, deviceObject.objectId.instance)
+                    .then(res => {
+                        if (res.error) {
+                            logger.log('warn', `[Polling] Error reading ${JSON.stringify(objectIdToRead)}: ${JSON.stringify(res.error)}`);
+                        }
+                        return res;
+                    });
 
-                    values[objectId] = {};
-	                  values[objectId].value = presentValue;
-	                  values[objectId].name = objectName;
-                });
-                this.emit('values', device, values);
-            }).catch(function (error) {
-                logger.log('error', `Error while fetching values: ${error}`);
+                results.push(res);
+
+                // Add delay between reads if configured
+                if (pollingDelayMs > 0 && deviceObject !== objects[objects.length - 1]) {
+                    await new Promise(resolve => setTimeout(resolve, pollingDelayMs));
+                }
+            }
+
+            // Process results
+            const values = {};
+            const successfulResults = results.filter(element => {
+                if (element.error) {
+                    return false;
+                }
+                if (!element.value || !element.value.values || element.value.values.length === 0) {
+                    logger.log('warn', `[Polling] Filtering out result with no values: ${JSON.stringify(element.value)}`);
+                    return false;
+                }
+                return true;
+            }).map(element => element.value);
+
+            successfulResults.forEach(object => {
+                if (!object || !object.values || object.values.length === 0 || !object.values[0].values) {
+                    logger.log('warn', `[Polling] Skipping malformed successful result: ${JSON.stringify(object)}`);
+                    return;
+                }
+                const objectId = object.values[0].objectId.type + '_' + object.values[0].objectId.instance;
+                const presentValue = this._findValueById(object.values[0].values, bacnet.enum.PropertyIds.PROP_PRESENT_VALUE);
+                const objectName = this._findValueById(object.values[0].values, bacnet.enum.PropertyIds.PROP_OBJECT_NAME);
+
+                values[objectId] = {};
+                values[objectId].value = presentValue;
+                values[objectId].name = objectName;
             });
+            this.emit('values', device, values);
         });
     }
 
