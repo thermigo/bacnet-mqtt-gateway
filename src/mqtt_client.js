@@ -113,21 +113,21 @@ class MqttClient extends EventEmitter {
         if (keys.length > 0 && messageJson[keys[0]] && typeof messageJson[keys[0]].value !== 'undefined') {
             keys.forEach(key => { // key is like "2_202"
                 const bacnetObjectType = key.split('_')[0]; // e.g., "2"
-                let haComponentType = 'sensor'; 
+                let componentType = 'sensor'; 
 
                 // Using string comparison for object types as in the user's snippet
                 if (bacnetObjectType === '0' || bacnetObjectType === '2' || bacnetObjectType === '139' || bacnetObjectType === '140' || bacnetObjectType === '141' || bacnetObjectType === '143') {
-                    haComponentType = 'sensor';
+                    componentType = 'sensor';
                 } else if (bacnetObjectType === '3' || bacnetObjectType === '5' || bacnetObjectType === '21') {
-                    haComponentType = 'binary_sensor';
+                    componentType = 'binary_sensor';
                 } else if (bacnetObjectType === '13' || bacnetObjectType === '19') { 
-                    haComponentType = 'sensor'; 
+                    componentType = 'sensor'; 
                 } else {
-                    haComponentType = 'sensor';
-                    logger.log('warn', `[MQTT] Unknown BACnet object type ${bacnetObjectType} for key ${key}, defaulting to HA type 'sensor'.`);
+                    componentType = 'sensor';
+                    logger.log('warn', `[MQTT] Unknown BACnet object type ${bacnetObjectType} for key ${key}, defaulting to type 'sensor'.`);
                 }
 
-                const topic = `homeassistant/${haComponentType}/${gatewayId}/${key}/state`;
+                const topic = `bacnet-gateway/${componentType}/${gatewayId}/${key}/state`;
                 const message = JSON.stringify(messageJson[key].value);
 
                 this.client.publish(topic, message, { retain: true }); 
