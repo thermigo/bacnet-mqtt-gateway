@@ -16,7 +16,7 @@ bacnetClient.on('deviceFound', (device) => {
 });
 
 bacnetClient.on('values', (device, values) => {
-    mqttClient.publishMessage(values);
+    mqttClient.publishMessage(values, device);
 });
 
 mqttClient.on('bacnetWriteCommand', (command) => {
