@@ -139,6 +139,10 @@ class MqttClient extends EventEmitter {
             const topic = `bacnet-gateway/${gatewayId}/device_found/${messageJson.deviceId}`;
             const message = JSON.stringify(messageJson);
             this.client.publish(topic, message, { retain: true });
+        } else if (keys.length === 1 && keys[0].startsWith('bacnetwrite_status/')) {
+            const topic = keys[0];
+            const message = JSON.stringify(messageJson[topic]);
+            this.client.publish(topic, message, { retain: false }); // Status messages probably shouldn't be retained
         } else {
             if (keys.length === 0 && JSON.stringify(messageJson) === '{}') {
                 logger.log('warn', '[MQTT] Received empty object to publish. Skipping.');
